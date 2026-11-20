@@ -17,6 +17,7 @@ class UserFlux {
 	static ufMaxConsecutiveFailures = 3
 	static ufRetryDelay = 1000 // 1 second delay between retries
 	static ufEndpoint = "https://integration-api.userflux.co"
+	static ufStorageKeyPrefix = ""
 
 	static initialize(apiKey, options) {
 		try {
@@ -27,6 +28,11 @@ class UserFlux {
 			}
 
 			UserFlux.ufApiKey = apiKey
+
+			UserFlux.ufStorageKeyPrefix =
+				"storageKeyPrefix" in options
+					? UserFlux.normalizeStorageKeyPrefix(options["storageKeyPrefix"])
+					: ""
 
 			if ("endpoint" in options && typeof options["endpoint"] === "string") {
 				UserFlux.ufEndpoint = options["endpoint"]
@@ -102,6 +108,28 @@ class UserFlux {
 		UserFlux.ufDefaultTrackingProperties = properties
 	}
 
+	static normalizeStorageKeyPrefix(prefix) {
+		if (typeof prefix !== "string") {
+			return ""
+		}
+
+		const normalized = prefix.trim().replace(/-+$/, "")
+		if (normalized === "") {
+			return ""
+		}
+
+		if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(normalized)) {
+			console.info("UF storageKeyPrefix contains invalid characters and will be ignored.")
+			return ""
+		}
+
+		return normalized
+	}
+
+	static getStorageKey(key) {
+		return UserFlux.ufStorageKeyPrefix ? `${UserFlux.ufStorageKeyPrefix}-${key}` : key
+	}
+
 	static getStorage() {
 		if (typeof window === "undefined") {
 			return null
@@ -110,9 +138,10 @@ class UserFlux {
 		return {
 			setItem: (key, value) => {
 				try {
+					const storageKey = UserFlux.getStorageKey(key)
 					let shouldSkipForLocalStorage = UserFlux.ufDisableUserIdStorage == true && key === "uf-userId"
 					if (!shouldSkipForLocalStorage && UserFlux.isLocalStorageAccessible())
-						localStorage.setItem(key, value)
+						localStorage.setItem(storageKey, value)
 
 					let shouldSkipForCookieStorage = key == "uf-track"
 					if (UserFlux.ufAllowCookies == true && !shouldSkipForCookieStorage)
@@ -123,12 +152,13 @@ class UserFlux {
 			},
 			getItem: (key) => {
 				try {
+					const storageKey = UserFlux.getStorageKey(key)
 					// first try fetch from cookies
 					const cookieValue = (UserFlux.ufAllowCookies == true ? UserFlux.getCookie(key) : null)
 					if (cookieValue !== null && cookieValue !== "") return cookieValue
 
 					// then try fetch from localStorage
-					const localStorageValue = (UserFlux.isLocalStorageAccessible() ? localStorage.getItem(key) : null)
+					const localStorageValue = (UserFlux.isLocalStorageAccessible() ? localStorage.getItem(storageKey) : null)
 					if (localStorageValue !== null && localStorageValue !== "") return localStorageValue
 
 					// if not found in cookies or localStorage, return null
@@ -140,8 +170,9 @@ class UserFlux {
 			},
 			removeItem: (key) => {
 				try {
+					const storageKey = UserFlux.getStorageKey(key)
 					if (UserFlux.ufAllowCookies == true) UserFlux.eraseCookie(key)
-					if (UserFlux.isLocalStorageAccessible()) localStorage.removeItem(key)
+					if (UserFlux.isLocalStorageAccessible()) localStorage.removeItem(storageKey)
 				} catch (error) {
 					console.info("Error removing item from storage: ", error)
 				}
@@ -157,14 +188,14 @@ class UserFlux {
 		return {
 			setItem: (key, value) => {
 				try {
-					sessionStorage.setItem(key, value)
+					sessionStorage.setItem(UserFlux.getStorageKey(key), value)
 				} catch (error) {
 					console.info("Error setting item to session storage: ", error)
 				}
 			},
 			getItem: (key) => {
 				try {
-					return sessionStorage.getItem(key)
+					return sessionStorage.getItem(UserFlux.getStorageKey(key))
 				} catch (error) {
 					console.info("Error getting item from session storage: ", error)
 					return null
@@ -172,7 +203,7 @@ class UserFlux {
 			},
 			removeItem: (key) => {
 				try {
-					sessionStorage.removeItem(key)
+					sessionStorage.removeItem(UserFlux.getStorageKey(key))
 				} catch (error) {
 					console.info("Error removing item from session storage: ", error)
 				}
@@ -936,6 +967,7 @@ class UserFlux {
 	// Utility function to set a cookie
 	static setCookie(name, value, days) {
 		try {
+			const cookieName = UserFlux.getStorageKey(name)
 			let expires = ""
 
 			if (days) {
@@ -953,7 +985,7 @@ class UserFlux {
 			const domain = matches ? matches[1] : ""
 			const cookieDomain = domain ? "; domain=." + domain : ""
 
-			document.cookie = name + "=" + (value || "") + expires + sameSite + "; Secure" + cookieDomain + "; path=/"
+			document.cookie = cookieName + "=" + (value || "") + expires + sameSite + "; Secure" + cookieDomain + "; path=/"
 		} catch (error) {
 			console.info("Error:", error)
 		}
@@ -962,7 +994,7 @@ class UserFlux {
 	// Utility function to get a cookie
 	static getCookie(name) {
 		try {
-			const nameEQ = name + "="
+			const nameEQ = UserFlux.getStorageKey(name) + "="
 			const ca = document.cookie.split(";")
 			for (let i = 0; i < ca.length; i++) {
 				let c = ca[i]
@@ -979,12 +1011,13 @@ class UserFlux {
 	// Utility function to erase a cookie
 	static eraseCookie(name) {
 		try {
+			const cookieName = UserFlux.getStorageKey(name)
 			// Dynamically determine the base domain
 			const hostMatchRegex = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 			const matches = document.location.hostname.match(hostMatchRegex)
 			const domain = matches ? "; domain=." + matches[0] : ""
 
-			document.cookie = name + "=; Max-Age=-99999999; path=/" + "; domain=." + domain
+			document.cookie = cookieName + "=; Max-Age=-99999999; path=/" + "; domain=." + domain
 		} catch (error) {
 			console.info("Error:", error)
 		}
@@ -994,8 +1027,9 @@ class UserFlux {
 	static isLocalStorageAccessible() {
 		try {
 			// Try to use localStorage
-			localStorage.setItem("uf-ls-test", "test")
-			localStorage.removeItem("uf-ls-test")
+			const testKey = UserFlux.getStorageKey("uf-ls-test")
+			localStorage.setItem(testKey, "test")
+			localStorage.removeItem(testKey)
 			return true
 		} catch (e) {
 			// Catch any errors, including security-related ones
@@ -1007,7 +1041,7 @@ class UserFlux {
 	static isSessionStorageAccessible() {
 		try {
 			const storage = window.sessionStorage
-			const testKey = "uf-ss-test"
+			const testKey = UserFlux.getStorageKey("uf-ss-test")
 			storage.setItem(testKey, "test")
 			storage.removeItem(testKey)
 			return true
