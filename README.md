@@ -44,6 +44,7 @@ The `initialize` method takes two arguments:
     -   `blockCommonBots` - A boolean indicating whether or not to block common bots from being tracked. Defaults to `true`
     -   `anonymousIdOverride` - A string value to be used as the anonymous id of the device the user is on.
     -   `endpoint` - A string value used as the base path for sending events to, useful in case you need to proxy events through a server. Defaults to `https://integration-api.userflux.co`.
+    -   `storageKeyPrefix` - A string prefix prepended to all keys stored in `localStorage`, `sessionStorage`, and cookies (separated by `-`). For example, `'example'` stores `uf-userId` as `example-uf-userId`. Useful when multiple UserFlux SDK instances run on the same site. Defaults to none.
 
 ## 3. Tracking events
 
@@ -183,6 +184,24 @@ UserFlux.getAnonymousId()
 ```
 
 You can retrieve the anonymous id by calling the `getAnonymousId` method. This is the id that will be used if no `userId` is provided in the `identify` or `track` methods.
+
+## Multiple Instances
+
+Use `UserFlux.createInstance()` or `new UserFlux()` when more than one UserFlux SDK runs in the same browser window, such as an embedded script on a host site that also initializes `UserFlux`. Pair each instance with its own `storageKeyPrefix` so both in-memory state and browser storage stay separate.
+
+```javascript
+import UserFlux from '@userflux/browser-js-lite'
+
+const thanksFlux = UserFlux.createInstance()
+thanksFlux.initialize('<YOUR_WRITE_KEY>', {
+	storageKeyPrefix: 'thanks',
+	allowCookies: true,
+})
+
+thanksFlux.track({ event: 'ad_impression' })
+```
+
+You can also pass `writeKey` and `options` directly to `UserFlux.createInstance('<YOUR_WRITE_KEY>', options)` or `new UserFlux('<YOUR_WRITE_KEY>', options)`. Static methods like `UserFlux.initialize` and `UserFlux.track` continue to run on a default instance for backwards compatibility.
 
 # Alternative Installation
 
