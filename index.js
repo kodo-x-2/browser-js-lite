@@ -1,111 +1,176 @@
 class UserFlux {
-	static ufApiKey = null
-	static ufUserId = null
-	static ufExternalId = null
-	static ufTrackQueue = []
-	static ufAnonymousId = ""
-	static ufSessionId = null
-	static ufAllowCookies = false
-	static ufCookieSameSiteSetting = "Strict"
-	static ufLocationEnrichmentEnabled = true
-	static ufDeviceDataEnrichmentEnabled = true
-	static ufDefaultTrackingProperties = {}
-	static ufCustomQueryParamsToCollect = []
-	static ufDisableUserIdStorage = false
-	static ufCookieExpiryDays = 365
-	static ufConsecutiveFailures = 0
-	static ufMaxConsecutiveFailures = 3
-	static ufRetryDelay = 1000 // 1 second delay between retries
-	static ufEndpoint = "https://integration-api.userflux.co"
-	static ufStorageKeyPrefix = ""
+	static defaultInstance = null
+
+	constructor(apiKey, options) {
+		this.ufApiKey = null
+		this.ufUserId = null
+		this.ufExternalId = null
+		this.ufTrackQueue = []
+		this.ufAnonymousId = ""
+		this.ufSessionId = null
+		this.ufAllowCookies = false
+		this.ufCookieSameSiteSetting = "Strict"
+		this.ufLocationEnrichmentEnabled = true
+		this.ufDeviceDataEnrichmentEnabled = true
+		this.ufDefaultTrackingProperties = {}
+		this.ufCustomQueryParamsToCollect = []
+		this.ufDisableUserIdStorage = false
+		this.ufCookieExpiryDays = 365
+		this.ufConsecutiveFailures = 0
+		this.ufMaxConsecutiveFailures = 3
+		this.ufRetryDelay = 1000 // 1 second delay between retries
+		this.ufEndpoint = "https://integration-api.userflux.co"
+		this.ufStorageKeyPrefix = ""
+		this.ufFlushIntervalId = null
+
+		if (apiKey !== undefined) {
+			this.initialize(apiKey, options)
+		}
+	}
+
+	static getDefaultInstance() {
+		if (!UserFlux.defaultInstance) {
+			UserFlux.defaultInstance = new UserFlux()
+		}
+
+		return UserFlux.defaultInstance
+	}
+
+	static createInstance(apiKey, options) {
+		return new UserFlux(apiKey, options)
+	}
 
 	static initialize(apiKey, options) {
+		UserFlux.getDefaultInstance().initialize(apiKey, options)
+	}
+
+	static updateDefaultTrackingProperties(properties) {
+		UserFlux.getDefaultInstance().updateDefaultTrackingProperties(properties)
+	}
+
+	static async identify(parameters) {
+		return await UserFlux.getDefaultInstance().identify(parameters)
+	}
+
+	static async track(parameters) {
+		return await UserFlux.getDefaultInstance().track(parameters)
+	}
+
+	static async trackBatch(events) {
+		return await UserFlux.getDefaultInstance().trackBatch(events)
+	}
+
+	static async reset() {
+		return await UserFlux.getDefaultInstance().reset()
+	}
+
+	static getUserId() {
+		return UserFlux.getDefaultInstance().getUserId()
+	}
+
+	static getAnonymousId() {
+		return UserFlux.getDefaultInstance().getAnonymousId()
+	}
+
+	static getSessionId() {
+		return UserFlux.getDefaultInstance().getSessionId()
+	}
+
+	static async flush() {
+		return await UserFlux.getDefaultInstance().flush()
+	}
+
+	static async trackPageView() {
+		return await UserFlux.getDefaultInstance().trackPageView()
+	}
+
+	initialize(apiKey, options) {
 		try {
-			const shouldDisableCommonBotsBlocking = "blockCommonBots" in options && options["blockCommonBots"] == false
+			const safeOptions = options && typeof options === "object" ? options : {}
+			const shouldDisableCommonBotsBlocking =
+				"blockCommonBots" in safeOptions && safeOptions["blockCommonBots"] == false
 			if (!shouldDisableCommonBotsBlocking && UserFlux.isBotUserAgent(window.navigator.userAgent)) {
 				console.info("Common bot detected. UserFlux SDK will not initialize.")
 				return
 			}
 
-			UserFlux.ufApiKey = apiKey
+			this.ufApiKey = apiKey
 
-			UserFlux.ufStorageKeyPrefix =
-				"storageKeyPrefix" in options
-					? UserFlux.normalizeStorageKeyPrefix(options["storageKeyPrefix"])
+			this.ufStorageKeyPrefix =
+				"storageKeyPrefix" in safeOptions
+					? UserFlux.normalizeStorageKeyPrefix(safeOptions["storageKeyPrefix"])
 					: ""
 
-			if ("endpoint" in options && typeof options["endpoint"] === "string") {
-				UserFlux.ufEndpoint = options["endpoint"]
+			if ("endpoint" in safeOptions && typeof safeOptions["endpoint"] === "string") {
+				this.ufEndpoint = safeOptions["endpoint"]
 			}
 
-			if ("allowCookies" in options && options["allowCookies"] == true) {
-				UserFlux.ufAllowCookies = true
+			if ("allowCookies" in safeOptions && safeOptions["allowCookies"] == true) {
+				this.ufAllowCookies = true
 			}
 
-			if ("cookieSameSiteSetting" in options && options["cookieSameSiteSetting"] == "Lax") {
-				UserFlux.ufCookieSameSiteSetting = "Lax"
+			if ("cookieSameSiteSetting" in safeOptions && safeOptions["cookieSameSiteSetting"] == "Lax") {
+				this.ufCookieSameSiteSetting = "Lax"
 			}
 
-			if ("cookieExpiryDays" in options && typeof options["cookieExpiryDays"] === "number") {
-				UserFlux.ufCookieExpiryDays = options["cookieExpiryDays"]
+			if ("cookieExpiryDays" in safeOptions && typeof safeOptions["cookieExpiryDays"] === "number") {
+				this.ufCookieExpiryDays = safeOptions["cookieExpiryDays"]
 			}
 
-			if ("disableUserIdStorage" in options && options["disableUserIdStorage"] == true) {
-				UserFlux.ufDisableUserIdStorage = true
+			if ("disableUserIdStorage" in safeOptions && safeOptions["disableUserIdStorage"] == true) {
+				this.ufDisableUserIdStorage = true
 			}
 
 			let anonymousIdOverride = null
-			if ("anonymousIdOverride" in options && typeof options["anonymousIdOverride"] === "string") {
-				anonymousIdOverride = options["anonymousIdOverride"]
+			if ("anonymousIdOverride" in safeOptions && typeof safeOptions["anonymousIdOverride"] === "string") {
+				anonymousIdOverride = safeOptions["anonymousIdOverride"]
 			}
 
-			UserFlux.ufAnonymousId = UserFlux.getOrCreateAnonymousId(anonymousIdOverride)
-			UserFlux.ufUserId = UserFlux.getUserId()
-			UserFlux.ufTrackQueue = UserFlux.loadEventsFromStorage()
+			this.ufAnonymousId = this.getOrCreateAnonymousId(anonymousIdOverride)
+			this.ufUserId = this.getUserId()
+			this.ufTrackQueue = this.loadEventsFromStorage()
 
-			if ("trackSession" in options && options["trackSession"] == false) {
-				// don't setup session id
-			} else {
-				UserFlux.setupSessionId()
+			if (!("trackSession" in safeOptions && safeOptions["trackSession"] == false)) {
+				this.setupSessionId()
 			}
 
-			if ("autoEnrich" in options && options["autoEnrich"] == false) {
-				UserFlux.ufLocationEnrichmentEnabled = false
-				UserFlux.ufDeviceDataEnrichmentEnabled = false
+			if ("autoEnrich" in safeOptions && safeOptions["autoEnrich"] == false) {
+				this.ufLocationEnrichmentEnabled = false
+				this.ufDeviceDataEnrichmentEnabled = false
 			}
 
-			if ("defaultTrackingProperties" in options && typeof options["defaultTrackingProperties"] === "object") {
-				UserFlux.ufDefaultTrackingProperties = options["defaultTrackingProperties"]
+			if ("defaultTrackingProperties" in safeOptions && typeof safeOptions["defaultTrackingProperties"] === "object") {
+				this.ufDefaultTrackingProperties = safeOptions["defaultTrackingProperties"]
 			}
 
 			if (
-				"customQueryParamsToCollect" in options &&
-				Array.isArray(options["customQueryParamsToCollect"]) === true
+				"customQueryParamsToCollect" in safeOptions &&
+				Array.isArray(safeOptions["customQueryParamsToCollect"]) === true
 			) {
-				UserFlux.ufCustomQueryParamsToCollect = options["customQueryParamsToCollect"]
+				this.ufCustomQueryParamsToCollect = safeOptions["customQueryParamsToCollect"]
 			}
 
-			UserFlux.startFlushInterval()
+			this.startFlushInterval()
 
-			if ("autoCapture" in options) {
-				UserFlux.setupAutoTracking(options["autoCapture"])
+			if ("autoCapture" in safeOptions) {
+				this.setupAutoTracking(safeOptions["autoCapture"])
 			}
 
-			if (UserFlux.ufDisableUserIdStorage == true && UserFlux.ufUserId != null) {
-				UserFlux.getStorage()?.removeItem("uf-userId")
+			if (this.ufDisableUserIdStorage == true && this.ufUserId != null) {
+				this.getStorage()?.removeItem("uf-userId")
 			}
 		} catch (error) {
 			console.info("Failed to initialize UserFlux SDK: ", error)
 		}
 	}
 
-	static updateDefaultTrackingProperties(properties) {
+	updateDefaultTrackingProperties(properties) {
 		if (typeof properties !== "object") {
 			console.info("UF defaultTrackingProperties must be an object.")
 			return
 		}
 
-		UserFlux.ufDefaultTrackingProperties = properties
+		this.ufDefaultTrackingProperties = properties
 	}
 
 	static normalizeStorageKeyPrefix(prefix) {
@@ -126,11 +191,11 @@ class UserFlux {
 		return normalized
 	}
 
-	static getStorageKey(key) {
-		return UserFlux.ufStorageKeyPrefix ? `${UserFlux.ufStorageKeyPrefix}-${key}` : key
+	getStorageKey(key) {
+		return this.ufStorageKeyPrefix ? `${this.ufStorageKeyPrefix}-${key}` : key
 	}
 
-	static getStorage() {
+	getStorage() {
 		if (typeof window === "undefined") {
 			return null
 		}
@@ -138,27 +203,27 @@ class UserFlux {
 		return {
 			setItem: (key, value) => {
 				try {
-					const storageKey = UserFlux.getStorageKey(key)
-					let shouldSkipForLocalStorage = UserFlux.ufDisableUserIdStorage == true && key === "uf-userId"
-					if (!shouldSkipForLocalStorage && UserFlux.isLocalStorageAccessible())
+					const storageKey = this.getStorageKey(key)
+					let shouldSkipForLocalStorage = this.ufDisableUserIdStorage == true && key === "uf-userId"
+					if (!shouldSkipForLocalStorage && this.isLocalStorageAccessible())
 						localStorage.setItem(storageKey, value)
 
 					let shouldSkipForCookieStorage = key == "uf-track"
-					if (UserFlux.ufAllowCookies == true && !shouldSkipForCookieStorage)
-						UserFlux.setCookie(key, value, UserFlux.ufCookieExpiryDays)
+					if (this.ufAllowCookies == true && !shouldSkipForCookieStorage)
+						this.setCookie(key, value, this.ufCookieExpiryDays)
 				} catch (error) {
 					console.info("Error setting item to storage: ", error)
 				}
 			},
 			getItem: (key) => {
 				try {
-					const storageKey = UserFlux.getStorageKey(key)
+					const storageKey = this.getStorageKey(key)
 					// first try fetch from cookies
-					const cookieValue = (UserFlux.ufAllowCookies == true ? UserFlux.getCookie(key) : null)
+					const cookieValue = (this.ufAllowCookies == true ? this.getCookie(key) : null)
 					if (cookieValue !== null && cookieValue !== "") return cookieValue
 
 					// then try fetch from localStorage
-					const localStorageValue = (UserFlux.isLocalStorageAccessible() ? localStorage.getItem(storageKey) : null)
+					const localStorageValue = (this.isLocalStorageAccessible() ? localStorage.getItem(storageKey) : null)
 					if (localStorageValue !== null && localStorageValue !== "") return localStorageValue
 
 					// if not found in cookies or localStorage, return null
@@ -170,9 +235,9 @@ class UserFlux {
 			},
 			removeItem: (key) => {
 				try {
-					const storageKey = UserFlux.getStorageKey(key)
-					if (UserFlux.ufAllowCookies == true) UserFlux.eraseCookie(key)
-					if (UserFlux.isLocalStorageAccessible()) localStorage.removeItem(storageKey)
+					const storageKey = this.getStorageKey(key)
+					if (this.ufAllowCookies == true) this.eraseCookie(key)
+					if (this.isLocalStorageAccessible()) localStorage.removeItem(storageKey)
 				} catch (error) {
 					console.info("Error removing item from storage: ", error)
 				}
@@ -180,22 +245,22 @@ class UserFlux {
 		}
 	}
 
-	static getSessionStorage() {
-		if (typeof window === "undefined" || !UserFlux.isSessionStorageAccessible()) {
+	getSessionStorage() {
+		if (typeof window === "undefined" || !this.isSessionStorageAccessible()) {
 			return null
 		}
 
 		return {
 			setItem: (key, value) => {
 				try {
-					sessionStorage.setItem(UserFlux.getStorageKey(key), value)
+					sessionStorage.setItem(this.getStorageKey(key), value)
 				} catch (error) {
 					console.info("Error setting item to session storage: ", error)
 				}
 			},
 			getItem: (key) => {
 				try {
-					return sessionStorage.getItem(UserFlux.getStorageKey(key))
+					return sessionStorage.getItem(this.getStorageKey(key))
 				} catch (error) {
 					console.info("Error getting item from session storage: ", error)
 					return null
@@ -203,7 +268,7 @@ class UserFlux {
 			},
 			removeItem: (key) => {
 				try {
-					sessionStorage.removeItem(UserFlux.getStorageKey(key))
+					sessionStorage.removeItem(this.getStorageKey(key))
 				} catch (error) {
 					console.info("Error removing item from session storage: ", error)
 				}
@@ -211,62 +276,62 @@ class UserFlux {
 		}
 	}
 
-	static setupSessionId() {
+	setupSessionId() {
 		try {
-			if (!UserFlux.isSessionStorageAccessible()) {
+			if (!this.isSessionStorageAccessible()) {
 				console.info("Session storage is not accessible. Session ID handling will be disabled.")
-				UserFlux.clearSessionId()
+				this.clearSessionId()
 				return
 			}
 
-			const currentSessionId = UserFlux.getSessionId()
+			const currentSessionId = this.getSessionId()
 
 			if (UserFlux.isStringNullOrBlank(currentSessionId)) {
 				const newSessionId = UserFlux.generateUUID()
-				UserFlux.setSessionId(newSessionId)
+				this.setSessionId(newSessionId)
 			}
 		} catch (error) {
 			console.info("Error setting up session ID: ", error)
 		}
 	}
 
-	static setSessionId(newSessionId) {
-		if (!UserFlux.isSessionStorageAccessible()) {
+	setSessionId(newSessionId) {
+		if (!this.isSessionStorageAccessible()) {
 			return
 		}
 
 		try {
-			UserFlux.ufSessionId = newSessionId
-			UserFlux.getSessionStorage()?.setItem("uf-sessionId", newSessionId)
-			if (UserFlux.ufAllowCookies == true) UserFlux.setCookie("uf-sessionId", newSessionId, 0.003) // 5 minutes in days
+			this.ufSessionId = newSessionId
+			this.getSessionStorage()?.setItem("uf-sessionId", newSessionId)
+			if (this.ufAllowCookies == true) this.setCookie("uf-sessionId", newSessionId, 0.003) // 5 minutes in days
 		} catch (error) {
 			console.info("Error setting session ID: ", error)
 		}
 	}
 
-	static getSessionId() {
+	getSessionId() {
 		try {
-			if (!UserFlux.isSessionStorageAccessible()) {
+			if (!this.isSessionStorageAccessible()) {
 				return null
 			}
 
 			// fetch from memory
-			if (!UserFlux.isStringNullOrBlank(UserFlux.ufSessionId)) {
-				UserFlux.setSessionId(UserFlux.ufSessionId) // replenish storage
-				return UserFlux.ufSessionId
+			if (!UserFlux.isStringNullOrBlank(this.ufSessionId)) {
+				this.setSessionId(this.ufSessionId) // replenish storage
+				return this.ufSessionId
 			}
 
 			// fetch from sesionStorage
-			const idFromSessionStorage = UserFlux.getSessionStorage()?.getItem("uf-sessionId")
+			const idFromSessionStorage = this.getSessionStorage()?.getItem("uf-sessionId")
 			if (!UserFlux.isStringNullOrBlank(idFromSessionStorage)) {
-				UserFlux.setSessionId(idFromSessionStorage) // replenish storage
+				this.setSessionId(idFromSessionStorage) // replenish storage
 				return idFromSessionStorage
 			}
 
 			// fetch from cookie
-			const idFromCookie = UserFlux.ufAllowCookies == true ? UserFlux.getCookie("uf-sessionId") : null
+			const idFromCookie = this.ufAllowCookies == true ? this.getCookie("uf-sessionId") : null
 			if (!UserFlux.isStringNullOrBlank(idFromCookie)) {
-				UserFlux.setSessionId(idFromCookie) // replenish storage
+				this.setSessionId(idFromCookie) // replenish storage
 				return idFromCookie
 			}
 
@@ -278,11 +343,11 @@ class UserFlux {
 		}
 	}
 
-	static clearSessionId() {
-		UserFlux.ufSessionId = null
+	clearSessionId() {
+		this.ufSessionId = null
 	}
 
-	static setupAutoTracking(autoCaptureOptions) {
+	setupAutoTracking(autoCaptureOptions) {
 		if (typeof autoCaptureOptions !== "object") {
 			// The typeof operator returns " object " for arrays because in JavaScript arrays are objects.
 			console.info("UF autoCapture must be an array.")
@@ -290,30 +355,30 @@ class UserFlux {
 		}
 
 		if (autoCaptureOptions.includes("page_views") || autoCaptureOptions.includes("all")) {
-			UserFlux.setupPageViewListener()
+			this.setupPageViewListener()
 		}
 
 		if (autoCaptureOptions.includes("page_leaves") || autoCaptureOptions.includes("all")) {
-			UserFlux.setupPageLeaveListener()
+			this.setupPageLeaveListener()
 		}
 
 		if (autoCaptureOptions.includes("clicks") || autoCaptureOptions.includes("all")) {
-			UserFlux.setupClickListener()
+			this.setupClickListener()
 		}
 	}
 
-	static setupPageViewListener() {
+	setupPageViewListener() {
 		// Check if running in a browser environment
 		if (typeof window === "undefined") {
 			return
 		}
 
 		window.addEventListener("pageshow", async (event) => {
-			await UserFlux.trackPageView()
+			await this.trackPageView()
 		})
 	}
 
-	static setupPageLeaveListener() {
+	setupPageLeaveListener() {
 		// Check if running in a browser environment
 		if (typeof window === "undefined") {
 			return
@@ -321,12 +386,12 @@ class UserFlux {
 
 		// TBD: what's best to use pagehide or beforeunload
 		window.addEventListener("pagehide", async (event) => {
-			await UserFlux.trackPageLeave()
+			await this.trackPageLeave()
 		})
 	}
 
-	static async trackPageView() {
-		await UserFlux.track({
+	async trackPageView() {
+		await this.track({
 			event: "page_view",
 			properties: {
 				...UserFlux.getPageProperties(),
@@ -338,7 +403,7 @@ class UserFlux {
 		})
 	}
 
-	static setupClickListener() {
+	setupClickListener() {
 		// Check if running in a browser environment
 		if (typeof window === "undefined") {
 			return
@@ -350,11 +415,11 @@ class UserFlux {
 			// If the clicked element or its parent is not what we want to track, return early.
 			if (!element) return
 
-			await UserFlux.trackClick(element)
+			await this.trackClick(element)
 		})
 	}
 
-	static async trackClick(element) {
+	async trackClick(element) {
 		const properties = {
 			elementTagName: element.tagName,
 			elementInnerText:
@@ -371,7 +436,7 @@ class UserFlux {
 			return obj
 		}, {})
 
-		await UserFlux.track({
+		await this.track({
 			event: "click",
 			properties: {
 				...filteredProperties,
@@ -380,8 +445,8 @@ class UserFlux {
 		})
 	}
 
-	static async trackPageLeave() {
-		await UserFlux.track({
+	async trackPageLeave() {
+		await this.track({
 			event: "page_leave",
 			properties: {
 				...UserFlux.getPageProperties(),
@@ -393,32 +458,32 @@ class UserFlux {
 		})
 	}
 
-	static isApiKeyProvided() {
-		return UserFlux.ufApiKey !== null
+	isApiKeyProvided() {
+		return this.ufApiKey !== null
 	}
 
-	static getOrCreateAnonymousId(override) {
+	getOrCreateAnonymousId(override) {
 		if (override) {
 			// Update anonymousId in memory + local + cookie storage to prevent it from expiring
-			UserFlux.ufAnonymousId = override
-			UserFlux.getStorage()?.setItem("uf-anonymousId", override)
+			this.ufAnonymousId = override
+			this.getStorage()?.setItem("uf-anonymousId", override)
 
 			return override
 		}
 
 		let anonymousId
-		if (UserFlux.isStringNullOrBlank(UserFlux.ufAnonymousId)) {
+		if (UserFlux.isStringNullOrBlank(this.ufAnonymousId)) {
 			// default value is '' which means it hasn't been set yet
 			// fetch from storage, if it isn't there then create a new ID
-			anonymousId = UserFlux.getStorage()?.getItem("uf-anonymousId") ?? UserFlux.createNewAnonymousId()
+			anonymousId = this.getStorage()?.getItem("uf-anonymousId") ?? UserFlux.createNewAnonymousId()
 		} else {
 			// otherwise value is set
-			anonymousId = UserFlux.ufAnonymousId
+			anonymousId = this.ufAnonymousId
 		}
 
 		// Update anonymousId in memory + local + cookie storage to prevent it from expiring
-		UserFlux.ufAnonymousId = anonymousId
-		UserFlux.getStorage()?.setItem("uf-anonymousId", anonymousId)
+		this.ufAnonymousId = anonymousId
+		this.getStorage()?.setItem("uf-anonymousId", anonymousId)
 
 		return anonymousId
 	}
@@ -435,8 +500,8 @@ class UserFlux {
 		})
 	}
 
-	static getUserId() {
-		let userId = UserFlux.ufUserId || UserFlux.getStorage()?.getItem("uf-userId")
+	getUserId() {
+		let userId = this.ufUserId || this.getStorage()?.getItem("uf-userId")
 
 		// clean up any wrongly stored user ids
 		let shouldForceUpdate = false
@@ -449,58 +514,62 @@ class UserFlux {
 
 		if (userId || shouldForceUpdate) {
 			// Update userId in local storage to prevent it from expiring
-			UserFlux.getStorage()?.setItem("uf-userId", userId)
+			this.getStorage()?.setItem("uf-userId", userId)
 		}
 
 		return userId
 	}
 
-	static getAnonymousId() {
-		return UserFlux.getOrCreateAnonymousId()
+	getAnonymousId() {
+		return this.getOrCreateAnonymousId()
 	}
 
-	static setUserId(userId) {
-		UserFlux.ufUserId = userId
-		UserFlux.getStorage()?.setItem("uf-userId", userId)
+	setUserId(userId) {
+		this.ufUserId = userId
+		this.getStorage()?.setItem("uf-userId", userId)
 	}
 
-	static setExternalId(externalId) {
-		UserFlux.ufExternalId = externalId
-		UserFlux.getStorage()?.setItem("uf-externalId", externalId)
+	setExternalId(externalId) {
+		this.ufExternalId = externalId
+		this.getStorage()?.setItem("uf-externalId", externalId)
 	}
 
-	static loadEventsFromStorage() {
+	loadEventsFromStorage() {
 		try {
-			const events = UserFlux.getStorage()?.getItem("uf-track")
+			const events = this.getStorage()?.getItem("uf-track")
 			return events ? JSON.parse(events) : []
 		} catch (error) {
 			console.info("Failed to get tracking events from storage: ", error)
-			UserFlux.getStorage()?.removeItem("uf-track")
+			this.getStorage()?.removeItem("uf-track")
 			return []
 		}
 	}
 
-	static async reset() {
+	async reset() {
 		// Firstly, flush any pending events
-		await UserFlux.checkQueue(UserFlux.ufTrackQueue, "event/ingest/batch", true)
+		await this.checkQueue(this.ufTrackQueue, "event/ingest/batch", true)
 
 		// Clear all stored data
-		UserFlux.ufUserId = null
-		UserFlux.getStorage()?.removeItem("uf-userId")
+		this.ufUserId = null
+		this.getStorage()?.removeItem("uf-userId")
 
-		UserFlux.ufExternalId = null
-		UserFlux.getStorage()?.removeItem("uf-externalId")
+		this.ufExternalId = null
+		this.getStorage()?.removeItem("uf-externalId")
 	}
 
-	static startFlushInterval() {
-		setInterval(async () => {
-			await UserFlux.checkQueue(UserFlux.ufTrackQueue, "event/ingest/batch", true)
+	startFlushInterval() {
+		if (this.ufFlushIntervalId !== null) {
+			clearInterval(this.ufFlushIntervalId)
+		}
+
+		this.ufFlushIntervalId = setInterval(async () => {
+			await this.checkQueue(this.ufTrackQueue, "event/ingest/batch", true)
 		}, 1500)
 	}
 
-	static async identify(parameters) {
+	async identify(parameters) {
 		// sanity check API key
-		if (!UserFlux.isApiKeyProvided()) {
+		if (!this.isApiKeyProvided()) {
 			console.info("API key not provided. Cannot identify user.")
 			return
 		}
@@ -512,14 +581,14 @@ class UserFlux {
 		}
 
 		// sanity check userId
-		let userId = parameters.userId || UserFlux.ufUserId
+		let userId = parameters.userId || this.ufUserId
 		if (userId && (typeof userId !== "string" || UserFlux.isStringNullOrBlank(userId))) userId = null
-		if (userId !== UserFlux.ufUserId) UserFlux.setUserId(userId)
+		if (userId !== this.ufUserId) this.setUserId(userId)
 
 		// sanity check externalId
-		let externalId = parameters.externalId || UserFlux.ufExternalId || UserFlux.getExternalIdQueryParam()
+		let externalId = parameters.externalId || this.ufExternalId || UserFlux.getExternalIdQueryParam()
 		if (externalId && (typeof externalId !== "string" || UserFlux.isStringNullOrBlank(externalId))) externalId = null
-		if (externalId !== UserFlux.ufExternalId) UserFlux.setExternalId(externalId)
+		if (externalId !== this.ufExternalId) this.setExternalId(externalId)
 
 		// sanity check properties
 		const properties = parameters.properties || {}
@@ -529,14 +598,14 @@ class UserFlux {
 		}
 
 		// sanity check enrichDeviceData
-		const enrichDeviceData = parameters.enrichDeviceData || UserFlux.ufDeviceDataEnrichmentEnabled
+		const enrichDeviceData = parameters.enrichDeviceData || this.ufDeviceDataEnrichmentEnabled
 		if (typeof enrichDeviceData !== "boolean") {
 			console.info("Invalid enrichDeviceData passed to identify method")
 			return
 		}
 
 		// sanity check enrichLocationData
-		const enrichLocationData = parameters.enrichLocationData || UserFlux.ufLocationEnrichmentEnabled
+		const enrichLocationData = parameters.enrichLocationData || this.ufLocationEnrichmentEnabled
 		if (typeof enrichLocationData !== "boolean") {
 			console.info("Invalid enrichLocationData passed to identify method")
 			return
@@ -545,17 +614,17 @@ class UserFlux {
 		const payload = {
 			userId: userId,
 			externalId: externalId,
-			anonymousId: UserFlux.getOrCreateAnonymousId(),
+			anonymousId: this.getOrCreateAnonymousId(),
 			properties: properties,
 			deviceData: enrichDeviceData ? UserFlux.getDeviceProperties() : null,
 		}
 
-		return await UserFlux.sendRequest("profile", payload, enrichLocationData)
+		return await this.sendRequest("profile", payload, enrichLocationData)
 	}
 
-	static async track(parameters) {
+	async track(parameters) {
 		// sanity check API key
-		if (!UserFlux.isApiKeyProvided()) {
+		if (!this.isApiKeyProvided()) {
 			console.info("API key not provided. Cannot track event.")
 			return
 		}
@@ -574,14 +643,14 @@ class UserFlux {
 		}
 
 		// sanity check userId
-		let userId = parameters.userId || UserFlux.ufUserId
+		let userId = parameters.userId || this.ufUserId
 		if (userId && (typeof userId !== "string" || UserFlux.isStringNullOrBlank(userId))) userId = null
-		if (userId !== UserFlux.ufUserId) UserFlux.setUserId(userId)
+		if (userId !== this.ufUserId) this.setUserId(userId)
 
 		// sanity check externalId
-		let externalId = parameters.externalId || UserFlux.ufExternalId || UserFlux.getExternalIdQueryParam()
+		let externalId = parameters.externalId || this.ufExternalId || UserFlux.getExternalIdQueryParam()
 		if (externalId && (typeof externalId !== "string" || UserFlux.isStringNullOrBlank(externalId))) externalId = null
-		if (externalId !== UserFlux.ufExternalId) UserFlux.setExternalId(externalId)
+		if (externalId !== this.ufExternalId) this.setExternalId(externalId)
 
 		// sanity check properties
 		const properties = parameters.properties || {}
@@ -591,14 +660,14 @@ class UserFlux {
 		}
 
 		// sanity check enrichDeviceData
-		const enrichDeviceData = parameters.enrichDeviceData || UserFlux.ufDeviceDataEnrichmentEnabled
+		const enrichDeviceData = parameters.enrichDeviceData || this.ufDeviceDataEnrichmentEnabled
 		if (typeof enrichDeviceData !== "boolean") {
 			console.info("Invalid enrichDeviceData passed to track method")
 			return
 		}
 
 		// sanity check enrichLocationData
-		const enrichLocationData = parameters.enrichLocationData || UserFlux.ufLocationEnrichmentEnabled
+		const enrichLocationData = parameters.enrichLocationData || this.ufLocationEnrichmentEnabled
 		if (typeof enrichLocationData !== "boolean") {
 			console.info("Invalid enrichLocationData passed to track method")
 			return
@@ -638,93 +707,93 @@ class UserFlux {
 		// combine event properties with any default tracking properties
 		const finalProperties = {
 			...properties,
-			...UserFlux.ufDefaultTrackingProperties,
+			...this.ufDefaultTrackingProperties,
 			...(enrichPageProperties ? UserFlux.getPageProperties() : {}),
 			...(enrichReferrerProperties ? UserFlux.getReferrerProperties() : {}),
 			...(enrichUTMProperties ? UserFlux.getUTMProperties() : {}),
 			...(enrichPaidAdProperties ? UserFlux.getPaidAdProperties() : {}),
-			...(UserFlux.getCustomQueryParamProperties() || {}),
+			...(this.getCustomQueryParamProperties() || {}),
 		}
 
 		const payload = {
 			timestamp: Date.now(),
 			userId: userId,
 			externalId: externalId,
-			anonymousId: UserFlux.getOrCreateAnonymousId(),
-			sessionId: UserFlux.getSessionId(),
+			anonymousId: this.getOrCreateAnonymousId(),
+			sessionId: this.getSessionId(),
 			name: event,
 			properties: finalProperties,
 			deviceData: enrichDeviceData ? UserFlux.getDeviceProperties() : null,
 		}
 
-		const shouldForceFlush = UserFlux.getStorage() == null || addToQueue == false
-		UserFlux.ufTrackQueue.push(payload)
-		UserFlux.saveEventsToStorage("uf-track", UserFlux.ufTrackQueue)
-		await UserFlux.checkQueue(UserFlux.ufTrackQueue, "event/ingest/batch", shouldForceFlush)
+		const shouldForceFlush = this.getStorage() == null || addToQueue == false
+		this.ufTrackQueue.push(payload)
+		this.saveEventsToStorage("uf-track", this.ufTrackQueue)
+		await this.checkQueue(this.ufTrackQueue, "event/ingest/batch", shouldForceFlush)
 		return null
 	}
 
-	static async trackBatch(events) {
+	async trackBatch(events) {
 		for (const event of events) {
-			await UserFlux.track({ ...event, addToQueue: true })
+			await this.track({ ...event, addToQueue: true })
 		}
 
-		await UserFlux.flush()
+		await this.flush()
 		return
 	}
 
-	static async flush() {
-		await UserFlux.checkQueue(UserFlux.ufTrackQueue, "event/ingest/batch", true)
+	async flush() {
+		await this.checkQueue(this.ufTrackQueue, "event/ingest/batch", true)
 	}
 
-	static saveEventsToStorage(key, queue) {
-		UserFlux.getStorage()?.setItem(key, JSON.stringify(queue))
+	saveEventsToStorage(key, queue) {
+		this.getStorage()?.setItem(key, JSON.stringify(queue))
 	}
 
-	static async checkQueue(queue, eventType, forceFlush) {
+	async checkQueue(queue, eventType, forceFlush) {
 		if (queue.length >= 10 || (forceFlush && queue.length > 0)) {
-			await UserFlux.flushEvents(queue, eventType)
+			await this.flushEvents(queue, eventType)
 		}
 	}
 
-	static async flushEvents(queue, eventType) {
-		if (!UserFlux.isApiKeyProvided()) {
+	async flushEvents(queue, eventType) {
+		if (!this.isApiKeyProvided()) {
 			console.info("API key not provided. Cannot flush events.")
 			return
 		}
 
 		// Check if we've hit the maximum consecutive failures
-		if (UserFlux.ufConsecutiveFailures >= UserFlux.ufMaxConsecutiveFailures) {
-			console.info(`UF: Max consecutive failures (${UserFlux.ufMaxConsecutiveFailures}) reached. Stopping flush attempts.`)
+		if (this.ufConsecutiveFailures >= this.ufMaxConsecutiveFailures) {
+			console.info(`UF: Max consecutive failures (${this.ufMaxConsecutiveFailures}) reached. Stopping flush attempts.`)
 			// Reset the failure counter after some time to allow retrying later
 			setTimeout(() => {
-				UserFlux.ufConsecutiveFailures = 0
+				this.ufConsecutiveFailures = 0
 			}, 60000) // Reset after 1 minute
 			return
 		}
 
 		const eventsToTrack = queue.splice(0, 10)
-		const success = await UserFlux.sendRequest(eventType, { events: eventsToTrack })
+		const success = await this.sendRequest(eventType, { events: eventsToTrack })
 		if (success) {
-			UserFlux.saveEventsToStorage(`uf-track`, queue)
-			UserFlux.ufConsecutiveFailures = 0
+			this.saveEventsToStorage(`uf-track`, queue)
+			this.ufConsecutiveFailures = 0
 		} else {
 			// If the request fails, add the events back to the queue
 			queue.push(...eventsToTrack)
-			UserFlux.saveEventsToStorage(`uf-track`, queue)
-			UserFlux.ufConsecutiveFailures++
+			this.saveEventsToStorage(`uf-track`, queue)
+			this.ufConsecutiveFailures++
 		}
 
 		// If the queue is not empty, check it again with a delay
 		if (queue.length > 0) {
 			setTimeout(async () => {
-				await UserFlux.checkQueue(queue, eventType, true)
-			}, UserFlux.ufRetryDelay)
+				await this.checkQueue(queue, eventType, true)
+			}, this.ufRetryDelay)
 		}
 	}
 
-	static async sendRequest(endpoint, data, locationEnrich = UserFlux.ufLocationEnrichmentEnabled) {
-		if (!UserFlux.isApiKeyProvided()) {
+	async sendRequest(endpoint, data, locationEnrich = this.ufLocationEnrichmentEnabled) {
+		if (!this.isApiKeyProvided()) {
 			console.info("API key not provided. Cannot send request.")
 			return false
 		}
@@ -736,11 +805,11 @@ class UserFlux {
 		}
 
 		try {
-			await fetch(`${UserFlux.ufEndpoint}/${endpoint}?locationEnrichment=${locationEnrich}`, {
+			await fetch(`${this.ufEndpoint}/${endpoint}?locationEnrichment=${locationEnrich}`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
-					Authorization: `Bearer ${UserFlux.ufApiKey}`,
+					Authorization: `Bearer ${this.ufApiKey}`,
 				},
 				body: JSON.stringify(data),
 				keepalive: true,
@@ -852,10 +921,10 @@ class UserFlux {
 		}
 	}
 
-	static getCustomQueryParamProperties() {
+	getCustomQueryParamProperties() {
 		try {
 			// Check if there are any custom query parameters to collect
-			if (UserFlux.ufCustomQueryParamsToCollect.length == 0) return null
+			if (this.ufCustomQueryParamsToCollect.length == 0) return null
 
 			// Check if running in a browser environment
 			if (typeof window === "undefined") {
@@ -867,7 +936,7 @@ class UserFlux {
 			const urlSearchParams = new URLSearchParams(new URL(locationHref).search)
 
 			let customQueryParams = {}
-			UserFlux.ufCustomQueryParamsToCollect.forEach((param) => {
+			this.ufCustomQueryParamsToCollect.forEach((param) => {
 				customQueryParams[param] = urlSearchParams.get(param) || null
 			})
 
@@ -965,9 +1034,9 @@ class UserFlux {
 	}
 
 	// Utility function to set a cookie
-	static setCookie(name, value, days) {
+	setCookie(name, value, days) {
 		try {
-			const cookieName = UserFlux.getStorageKey(name)
+			const cookieName = this.getStorageKey(name)
 			let expires = ""
 
 			if (days) {
@@ -977,7 +1046,7 @@ class UserFlux {
 			}
 
 			// Set SameSite setting
-			const sameSite = `; SameSite=${UserFlux.ufCookieSameSiteSetting}`
+			const sameSite = `; SameSite=${this.ufCookieSameSiteSetting}`
 
 			// Dynamically determine the base domain
 			const hostMatchRegex = /^(?:https?:\/\/)?(?:[^\/]+\.)?([^.\/]+\.(?:co\.uk|com\.au|com|co|money|io|is|dev|app|ai|vc|xyz|gg|net|me|health)).*$/i
@@ -992,9 +1061,9 @@ class UserFlux {
 	}
 
 	// Utility function to get a cookie
-	static getCookie(name) {
+	getCookie(name) {
 		try {
-			const nameEQ = UserFlux.getStorageKey(name) + "="
+			const nameEQ = this.getStorageKey(name) + "="
 			const ca = document.cookie.split(";")
 			for (let i = 0; i < ca.length; i++) {
 				let c = ca[i]
@@ -1009,9 +1078,9 @@ class UserFlux {
 	}
 
 	// Utility function to erase a cookie
-	static eraseCookie(name) {
+	eraseCookie(name) {
 		try {
-			const cookieName = UserFlux.getStorageKey(name)
+			const cookieName = this.getStorageKey(name)
 			// Dynamically determine the base domain
 			const hostMatchRegex = /[a-z0-9][a-z0-9-]+\.[a-z]{2,}$/i
 			const matches = document.location.hostname.match(hostMatchRegex)
@@ -1024,10 +1093,10 @@ class UserFlux {
 	}
 
 	// Method to check if localStorage is accessible
-	static isLocalStorageAccessible() {
+	isLocalStorageAccessible() {
 		try {
 			// Try to use localStorage
-			const testKey = UserFlux.getStorageKey("uf-ls-test")
+			const testKey = this.getStorageKey("uf-ls-test")
 			localStorage.setItem(testKey, "test")
 			localStorage.removeItem(testKey)
 			return true
@@ -1038,10 +1107,10 @@ class UserFlux {
 	}
 
 	// Method to check if sessionStorage is accessible
-	static isSessionStorageAccessible() {
+	isSessionStorageAccessible() {
 		try {
 			const storage = window.sessionStorage
-			const testKey = UserFlux.getStorageKey("uf-ss-test")
+			const testKey = this.getStorageKey("uf-ss-test")
 			storage.setItem(testKey, "test")
 			storage.removeItem(testKey)
 			return true

@@ -185,6 +185,24 @@ UserFlux.getAnonymousId()
 
 You can retrieve the anonymous id by calling the `getAnonymousId` method. This is the id that will be used if no `userId` is provided in the `identify` or `track` methods.
 
+## Multiple Instances
+
+Use `UserFlux.createInstance()` or `new UserFlux()` when more than one UserFlux SDK runs in the same browser window, such as an embedded script on a host site that also initializes `UserFlux`. Pair each instance with its own `storageKeyPrefix` so both in-memory state and browser storage stay separate.
+
+```javascript
+import UserFlux from '@userflux/browser-js-lite'
+
+const thanksFlux = UserFlux.createInstance()
+thanksFlux.initialize('<YOUR_WRITE_KEY>', {
+	storageKeyPrefix: 'thanks',
+	allowCookies: true,
+})
+
+thanksFlux.track({ event: 'ad_impression' })
+```
+
+You can also pass `writeKey` and `options` directly to `UserFlux.createInstance('<YOUR_WRITE_KEY>', options)` or `new UserFlux('<YOUR_WRITE_KEY>', options)`. Static methods like `UserFlux.initialize` and `UserFlux.track` continue to run on a default instance for backwards compatibility.
+
 # Alternative Installation
 
 If you do not want to use the NPM package manger, simply drop the following into your HTML
